@@ -34,12 +34,29 @@
       <input id="file-input" type="file" accept=".docx,.txt,.md" hidden>
       <div class="material-meta"><span>支援文件、純文字、Markdown</span><strong id="material-count">0 字</strong></div>
       <p id="material-note" class="input-note" role="status">超過 40 字，就能開始。</p>
+      <fieldset class="marketing-settings" aria-describedby="marketing-help">
+        <legend>這次，想打動誰？</legend>
+        <p id="marketing-help" class="marketing-help">先選目標，再補充對象與情境。選填欄位可留白。</p>
+        <label for="marketing-goal">行銷目標</label>
+        <select id="marketing-goal">
+          <option>認識創作者</option><option>新品上市</option><option>送禮推薦</option><option>到店參觀</option>
+        </select>
+        <label for="marketing-audience">受眾 <span class="optional">選填</span></label>
+        <input id="marketing-audience" type="text" maxlength="200" placeholder="例：喜歡插畫、初次認識品牌的人">
+        <label for="marketing-occasion">場合 <span class="optional">選填</span></label>
+        <input id="marketing-occasion" type="text" maxlength="200" placeholder="例：朋友生日、週末逛店">
+        <label for="marketing-budget">客人購買預算 <span class="optional">選填</span></label>
+        <input id="marketing-budget" type="text" maxlength="100" placeholder="例：每份 NT$500–1,000" aria-describedby="budget-help">
+        <p id="budget-help" class="marketing-help">請註明幣別與單位。這是客人的預算，不是商品售價或廣告費。</p>
+        <p id="marketing-status" class="marketing-status" role="status" aria-live="polite"></p>
+      </fieldset>
       <button id="start" class="primary-button" disabled>開始生產 <span aria-hidden="true">↗</span></button>
       <div class="desk-note"><span aria-hidden="true">✎</span><p>素材沒寫的，不亂編。<br>留給訪談，一起補齊。</p></div>
     </aside>
     <section class="workspace" aria-label="文章生產流程">
       <div class="workspace-heading"><div><p class="eyebrow">創作者的工作桌</p><h2>讓好故事，被找到。</h2></div><span id="mode-label" class="desk-label">一份素材，五步成稿</span></div>
       <nav id="steps" class="steps" aria-label="五個生產階段"></nav>
+      <p id="marketing-summary" class="marketing-summary" hidden></p>
       <div class="progress-line"><span id="progress-text" role="status" aria-live="polite">準備好素材，就從關鍵字開始。</span><span id="progress-count">0 / 5</span></div>
       <section id="stage-card" class="stage-card paper" aria-label="階段內容"></section>
     </section>

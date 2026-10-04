@@ -160,7 +160,7 @@ try {
   await stop();
   const savedCachePath = path.join(temp, 'data/cache.json');
   const savedCache = JSON.parse(await fs.readFile(savedCachePath, 'utf8'));
-  const interviewId = createHash('sha1').update('interview' + JSON.stringify(responses.interview.input)).digest('hex');
+  const interviewId = createHash('sha1').update('interview' + JSON.stringify({ ...responses.interview.input, marketing: { goal: '認識創作者', audience: '', occasion: '', budget: '' } })).digest('hex'); // 伺服器會把行銷設定的預設值併進輸入再算快取
   savedCache[interviewId].data.facts.forEach(f => { delete f.source; });
   await fs.writeFile(savedCachePath, JSON.stringify(savedCache));
   logs = ''; await start();

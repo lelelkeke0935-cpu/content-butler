@@ -60,11 +60,25 @@ async function health() {
   return { ok: true, codex: healthMemo, mock: false, cache_entries: Object.keys(cache).length };
 }
 let running = 0;
+const marketingGoals = ['認識創作者', '新品上市', '送禮推薦', '到店參觀'];
+function normalizeMarketing(value = {}) {
+  if (!object(value) || Object.keys(value).some(k => !['goal', 'audience', 'occasion', 'budget'].includes(k))) fail('行銷設定格式不正確。');
+  const result = {};
+  for (const [field, limit] of Object.entries({ goal: 20, audience: 200, occasion: 200, budget: 100 })) {
+    const text = value[field] ?? '';
+    if (typeof text !== 'string' || [...text].length > limit) fail('行銷設定欄位格式或長度不正確。');
+    result[field] = text.trim();
+  }
+  result.goal ||= '認識創作者';
+  if (!marketingGoals.includes(result.goal)) fail('請選擇有效的行銷目標。');
+  return result;
+}
 async function ai(stage, input) {
   if (typeof input.material !== 'string' || !input.material.trim() || !object(input.brand)) fail('請提供素材與品牌資料。');
   if (stage !== 'keywords' && !validate(schemas.keywords, input.keywords)) fail('請先完成關鍵字。');
   if (['draft', 'social'].includes(stage) && !validate(schemas.outline, input.outline)) fail('請先完成文章架構。');
   if (stage === 'social' && !validate(schemas.draft, input.draft)) fail('請先完成文案。');
+  input = { ...input, marketing: normalizeMarketing(input.marketing) };
   const id = key(stage, input);
   if (!input.force && cache[id]?.mock === MOCK && (stage !== 'interview' || validate(schemas.interview, cache[id].data))) return { ...cache[id], cached: true };
   if (running >= 3) fail('目前有三個階段進行中，請稍後再試。', 429);
@@ -77,7 +91,7 @@ async function ai(stage, input) {
     else {
       const template = await fs.readFile(path.join(ROOT, `prompts/${stage}.md`), 'utf8');
       const values = { ...input, material: [...input.material].slice(0, 6000).join('') };
-      const prompt = template.replace(/\{\{(material|brand|keywords|outline|draft)\}\}/g, (_, k) => typeof values[k] === 'string' ? values[k] : JSON.stringify(values[k] ?? {}));
+      const prompt = template.replace(/\{\{(material|brand|keywords|outline|draft|marketing)\}\}/g, (_, k) => typeof values[k] === 'string' ? values[k] : JSON.stringify(values[k] ?? {}));
       dir = await fs.mkdtemp(path.join(os.tmpdir(), 'content-ai-'));
       const output = path.join(dir, 'result.json');
       const r = await run(codexBin(), ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-c', 'model_reasoning_effort="low"', '-C', dir, '--output-schema', path.join(ROOT, `schemas/${stage}.json`), '-o', output, '-'], prompt);
