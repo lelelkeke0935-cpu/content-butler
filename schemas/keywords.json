@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "primary": {
+      "type": "string"
+    },
+    "secondary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kw": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string",
+            "enum": [
+              "找資訊",
+              "找商品",
+              "找店",
+              "比較"
+            ]
+          }
+        },
+        "required": [
+          "kw",
+          "intent"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q",
+          "why"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 5,
+      "maxItems": 5
+    }
+  },
+  "required": [
+    "subject",
+    "primary",
+    "secondary",
+    "questions"
+  ],
+  "additionalProperties": false
+}

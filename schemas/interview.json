@@ -1,0 +1,73 @@
+{
+  "type": "object",
+  "properties": {
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fact": {
+            "type": "string"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "fact",
+          "quote"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 5,
+      "maxItems": 8
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 4,
+      "maxItems": 6
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "enum": [
+              "創作起點",
+              "作品與角色",
+              "製作細節",
+              "買家常問",
+              "近況與通路"
+            ]
+          },
+          "q": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "q",
+          "why"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 8,
+      "maxItems": 8
+    }
+  },
+  "required": [
+    "facts",
+    "missing",
+    "questions"
+  ],
+  "additionalProperties": false
+}

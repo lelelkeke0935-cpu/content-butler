@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#FBF6EC">
+  <title>內容管家｜創作者的工作桌</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <div class="identity"><span class="logo-mark" aria-hidden="true">文<span>✦</span></span><div><h1>內容管家</h1><p>把創作者素材，變成 AI 找得到的文章</p></div></div>
+    <section id="brand-card" class="brand-card" aria-label="品牌資料"><strong>正在讀取品牌…</strong><p>整理品牌的內容起點</p></section>
+    <div class="connection"><span id="health-dot" class="health-dot"></span><span id="health-text">Codex 連線中</span><button id="health-retry" class="text-button" hidden>再試一次</button></div>
+  </header>
+  <main class="desk">
+    <aside class="material paper">
+      <div class="tape" aria-hidden="true"></div>
+      <div class="section-heading"><h2>從一份素材開始</h2><span class="tiny-star" aria-hidden="true">✳</span></div>
+      <p class="muted">你提供故事，我們整理成文章。</p>
+      <label for="brand-url">品牌網址</label>
+      <input id="brand-url" type="url" value="https://www.cornven.com/" spellcheck="false">
+      <label for="material-text">創作者素材 <span class="label-note">訪談、介紹都可以</span></label>
+      <textarea id="material-text" placeholder="貼上創作者介紹、作品故事或訪談紀錄。&#10;&#10;沒有提到的事實，會標記待訪談補充。" aria-describedby="material-count material-note"></textarea>
+      <div class="material-tools"><button id="choose-file" class="small-button">＋ 選檔案</button><button id="load-sample" class="text-button">載入示範素材 ↗</button></div>
+      <input id="file-input" type="file" accept=".docx,.txt,.md" hidden>
+      <div class="material-meta"><span>支援文件、純文字、Markdown</span><strong id="material-count">0 字</strong></div>
+      <p id="material-note" class="input-note" role="status">超過 40 字，就能開始。</p>
+      <button id="start" class="primary-button" disabled>開始生產 <span aria-hidden="true">↗</span></button>
+      <div class="desk-note"><span aria-hidden="true">✎</span><p>素材沒寫的，不亂編。<br>留給訪談，一起補齊。</p></div>
+    </aside>
+    <section class="workspace" aria-label="文章生產流程">
+      <div class="workspace-heading"><div><p class="eyebrow">創作者的工作桌</p><h2>讓好故事，被找到。</h2></div><span id="mode-label" class="desk-label">一份素材，五步成稿</span></div>
+      <nav id="steps" class="steps" aria-label="五個生產階段"></nav>
+      <div class="progress-line"><span id="progress-text" role="status" aria-live="polite">準備好素材，就從關鍵字開始。</span><span id="progress-count">0 / 5</span></div>
+      <section id="stage-card" class="stage-card paper" aria-label="階段內容"></section>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

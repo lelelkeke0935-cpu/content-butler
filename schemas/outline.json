@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "properties": {
+    "h1": {
+      "type": "string"
+    },
+    "answer_plan": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "h2": {
+            "type": "string"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "h2",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "faq": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    }
+  },
+  "required": [
+    "h1",
+    "answer_plan",
+    "sections",
+    "faq"
+  ],
+  "additionalProperties": false
+}

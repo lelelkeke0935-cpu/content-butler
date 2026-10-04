@@ -1,0 +1,79 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "answer": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "h2": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "h2",
+          "body"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "faq": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "a": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q",
+          "a"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cta": {
+      "type": "string"
+    },
+    "seo_title": {
+      "type": "string"
+    },
+    "meta_description": {
+      "type": "string"
+    },
+    "handle": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "title",
+    "answer",
+    "sections",
+    "faq",
+    "cta",
+    "seo_title",
+    "meta_description",
+    "handle",
+    "tags"
+  ],
+  "additionalProperties": false
+}
