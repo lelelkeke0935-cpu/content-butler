@@ -17,6 +17,22 @@ const richText = (value) => escapeHTML(value).replace(/【待訪談補充：[^�
 const charCount = (value) => Array.from(String(value || '')).length;
 const list = (items) => `<ul>${items.map((item) => `<li>${richText(item)}</li>`).join('')}</ul>`;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const marketingFields = ['goal', 'audience', 'occasion', 'budget'];
+function readMarketing() {
+  return Object.fromEntries(marketingFields.map(field => [field, $(`marketing-${field}`).value.trim()]));
+}
+function marketingChanged() {
+  return state.input && JSON.stringify(readMarketing()) !== JSON.stringify(state.input.marketing);
+}
+function updateMarketing() {
+  $('marketing-status').textContent = marketingChanged() ? '設定已修改。請按「開始生產」，讓五個階段套用新設定。' : '';
+  const summary = $('marketing-summary');
+  summary.hidden = !state.input;
+  if (state.input) {
+    const m = state.input.marketing;
+    summary.textContent = `本次內容設定｜${m.goal} · 受眾：${m.audience || '未指定'} · 場合：${m.occasion || '未指定'} · 購買預算：${m.budget || '未指定'}`;
+  }
+}
 const mockMaterial = '【虛構示範素材】\n創作者林小禾經營「小禾紙上散步」。她以街角植物、窗邊光影和散步時看到的風景為靈感，畫出日常裡的小發現。\n她的原創角色叫「葉葉」，是一位帶著小葉子的散步朋友。作品包含插畫明信片與裝飾貼紙，適合寫卡片與整理手帳。她先用鉛筆畫草稿，再以數位繪圖完成上色。\n這份示範素材未提供紙張材質、製作地、售價與補貨時間。品牌「日常選物」整理亞洲獨立創作者的文具與插畫作品，網站使用 Shopify。';
 const mockBrand = { url: 'https://example.com/', name: '日常選物', title: '日常選物｜虛構示範品牌', description: '亞洲獨立創作者的文具與插畫作品', lang: 'zh-TW', platform: 'Shopify', counts: { products: 24, collections: 6, articles: 0 }, collections: ['文具與貼紙', '插畫與卡片'] };
 const mockKeywords = {
@@ -164,6 +180,7 @@ async function loadHealth() {
   $('health-text').textContent = 'Codex 連線中';
   try {
     const result = await request('/api/health');
+    if (result.mock) $('mode-label').textContent = '示範資料 · 不依行銷設定改寫';
     const ready = result.mock || result.codex === 'logged-in';
     $('health-dot').className = `health-dot ${ready ? 'ready' : 'off'}`;
     $('health-text').textContent = result.mock ? '示範服務' : ({ 'logged-in': 'Codex 已連線', 'not-logged-in': 'Codex 尚未登入', missing: '未找到 Codex' }[result.codex] || '連線待確認');
@@ -173,11 +190,13 @@ async function loadHealth() {
 function updateControls() {
   const locked = state.busy || state.loading;
   for (const id of ['brand-url', 'material-text', 'choose-file', 'load-sample', 'file-input']) $(id).disabled = locked;
+  for (const field of marketingFields) $(`marketing-${field}`).disabled = locked;
+  updateMarketing();
   const count = charCount($('material-text').value.trim());
   $('material-count').textContent = `${count.toLocaleString('zh-TW')} 字`;
   $('start').disabled = locked || count <= 40;
   $('start').innerHTML = `${state.busy ? '正在生產…' : state.loading ? '正在讀取…' : '開始生產'} <span aria-hidden="true">↗</span>`;
-  document.querySelectorAll('[data-action="regenerate"], [data-action="retry"]').forEach((button) => { button.disabled = locked; });
+  document.querySelectorAll('[data-action="regenerate"], [data-action="retry"]').forEach((button) => { button.disabled = locked || Boolean(marketingChanged()); });
 }
 function renderSteps() {
   $('steps').innerHTML = state.stages.map((stage, i) => {
@@ -244,7 +263,7 @@ function invalidate(indices) {
   for (const i of indices) state.stages[i] = { status: 'stale', result: null, error: '', started: 0 };
 }
 function payloadFor(i, force) {
-  const common = { material: state.input.material, brand: state.input.brand };
+  const common = { material: state.input.material, brand: state.input.brand, marketing: state.input.marketing };
   const keywords = state.stages[0].result?.data;
   if (i === 0) return { ...common, force };
   if (i === 1 || i === 2) return { ...common, keywords, force };
@@ -291,7 +310,7 @@ async function startProduction() {
     let material = $('material-text').value.trim();
     if (!mockMode) { const result = await request('/api/material', { text: material }); material = result.text; }
     if (charCount(material.trim()) <= 40) throw new Error('整理後的素材不足，請補到超過 40 字。');
-    state.input = { material, brand: structuredClone(state.brand) };
+    state.input = { material, brand: structuredClone(state.brand), marketing: readMarketing() };
     note(mockMode ? '虛構示範素材，不連線也能完整演示。' : '素材已整理，開始製作文章。');
     await runPipeline();
   } catch (error) { note(error.message, true); }
@@ -299,6 +318,7 @@ async function startProduction() {
 }
 async function rerun(i, force) {
   if (state.busy || state.loading || !state.input) return;
+  if (marketingChanged()) { notify('行銷設定已修改，請按「開始生產」套用新設定。'); return; }
   const resumePipeline = state.stages[i].status === 'failed' && !force;
   state.busy = true;
   invalidate(descendants[i]);
@@ -381,13 +401,14 @@ $('stage-card').addEventListener('click', async (event) => {
   }
 });
 $('material-text').addEventListener('input', () => { updateControls(); note(charCount($('material-text').value.trim()) > 40 ? '素材準備好了，可以開始。' : '超過 40 字，就能開始。'); });
+for (const field of marketingFields) $(`marketing-${field}`).addEventListener('input', updateControls);
 $('start').addEventListener('click', startProduction);
 $('choose-file').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', uploadFile);
 $('load-sample').addEventListener('click', loadSample);
 $('health-retry').addEventListener('click', loadHealth);
 if (mockMode) {
-  $('mode-label').textContent = '示範資料 · 虛構創作者';
+  $('mode-label').textContent = '示範資料 · 不依行銷設定改寫';
   $('material-text').value = mockMaterial;
   note('虛構示範素材，不連線也能完整演示。');
 }
