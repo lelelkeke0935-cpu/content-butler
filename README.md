@@ -59,3 +59,10 @@ node scripts/smoke.mjs
 今天不連接 Shopify 後台自動發佈與排程，不做帳號登入、多品牌管理或資料庫。輸出的文字仍需訪談補齊與人工確認。
 
 有待補內容時，請先完成訪談，再重新整理素材與文章。
+
+## 誰做的
+
+- 團隊：Kyle、Zita 與隊友們。兩位主要成員都是程式新手。
+- 程式由 Codex CLI 撰寫，文章內容由 Codex CLI 呼叫 OpenAI 模型產生。
+- 規劃、驗收與影片製作有用到 Claude Code 協助。
+- 示範用的品牌是 Cornven（https://www.cornven.com/）。品牌資料來自公開網頁；創作者素材不放在這個 repo。
