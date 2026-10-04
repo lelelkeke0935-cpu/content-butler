@@ -4,4 +4,10 @@ node_modules/
 data/cache.json
 *.log
 materials/
-video/
+video/*
+!video/director.js
+!video/record.mjs
+!video/assemble.py
+!video/music.py
+!video/cut_ops.py
+!video/join_intro.py
