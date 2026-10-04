@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "found": {
+      "type": "boolean"
+    },
+    "text": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3
+    }
+  },
+  "required": [
+    "found",
+    "text",
+    "sources"
+  ],
+  "additionalProperties": false
+}

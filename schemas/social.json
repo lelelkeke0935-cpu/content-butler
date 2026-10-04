@@ -1,0 +1,56 @@
+{
+  "type": "object",
+  "properties": {
+    "threads": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 280
+        },
+        "hashtags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^#\\s]+$"
+          },
+          "minItems": 3,
+          "maxItems": 5
+        }
+      },
+      "required": [
+        "text",
+        "hashtags"
+      ],
+      "additionalProperties": false
+    },
+    "instagram": {
+      "type": "object",
+      "properties": {
+        "caption": {
+          "type": "string",
+          "maxLength": 380
+        },
+        "hashtags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^#\\s]+$"
+          },
+          "minItems": 8,
+          "maxItems": 12
+        }
+      },
+      "required": [
+        "caption",
+        "hashtags"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "threads",
+    "instagram"
+  ],
+  "additionalProperties": false
+}

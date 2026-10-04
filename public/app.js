@@ -12,6 +12,8 @@ const state = {
   active: 0, manual: false, busy: false, loading: false,
   brand: null, brandUrl: '', input: null, toastTimer: null
 };
+let draftPlatform = 'website', socialState = {}, fillPanel = null;
+function clearDraftExtras() { draftPlatform = 'website'; socialState = {}; fillPanel = null; }
 const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const richText = (value) => escapeHTML(value).replace(/【待訪談補充：[^】]*】/g, '<mark>$&</mark>');
 const charCount = (value) => Array.from(String(value || '')).length;
@@ -85,6 +87,12 @@ const mockDraft = {
   meta_description: '認識小禾紙上散步與創作者林小禾，從街角植物、窗邊光影到原創角色葉葉，了解插畫明信片與裝飾貼紙的創作靈感，一起在日常選物探索寫卡片與整理手帳的靈感。',
   handle: 'little-grass-paper-walk', tags: ['插畫', '明信片', '手帳貼紙', '創作者故事']
 };
+const mockSocial = {
+  threads: { text: '小禾紙上散步，把街角植物與窗邊光影畫成插畫。\n\n帶著小葉子的葉葉，陪你收集日常的小發現。用明信片寫卡片，用裝飾貼紙整理手帳，把散步的風景留在紙上。', hashtags: ['小禾紙上散步', '葉葉', '插畫', '手帳'] },
+  instagram: { caption: '把日常的小發現，收進紙上 🌿\n\n林小禾經營小禾紙上散步，以街角植物、窗邊光影與散步風景為靈感。\n\n帶著小葉子的原創角色葉葉，出現在這個插畫世界。明信片與裝飾貼紙，陪你寫卡片、整理手帳。', hashtags: ['小禾紙上散步', '林小禾', '葉葉', '插畫', '明信片', '裝飾貼紙', '手帳', '日常風景'] }
+};
+// 虛構人物沒有可查證的公開出處，示範查無資料。
+const mockFill = { found: false, text: '', sources: [] };
 function nextTuesday() {
   const local = new Date(Date.now() + 8 * 3600000);
   const days = (2 - local.getUTCDay() + 7) % 7 || 7;
@@ -111,6 +119,20 @@ const mockPublish = {
     { id: 'no_placeholder', label: '沒有待補的地方', status: 'warn', detail: '還有 3 處要等訪談補充。' }
   ]
 };
+function mockPublishForDraft() {
+  const d = state.stages[3].result.data;
+  const result = structuredClone(mockPublish);
+  const p = text => `<p>${escapeHTML(text)}</p>`;
+  result.html = [p(d.answer), ...d.sections.flatMap(s => [`<h2>${escapeHTML(s.h2)}</h2>`, ...s.body.split(/\n\s*\n/).map(p)]), '<h2>常見問答</h2>', ...d.faq.flatMap(f => [`<h3>${escapeHTML(f.q)}</h3>`, p(f.a)]), p(d.cta)].join('\n');
+  result.markdown = [`# ${d.title}`, d.answer, ...d.sections.flatMap(s => [`## ${s.h2}`, s.body]), '## 常見問答', ...d.faq.flatMap(f => [`### ${f.q}`, f.a]), d.cta].join('\n\n');
+  const jsonld = JSON.parse(result.jsonld);
+  Object.assign(jsonld['@graph'][0], { headline: d.title, articleBody: d.answer + '\n' + d.sections.map(s => s.body).join('\n') });
+  jsonld['@graph'][1].mainEntity = d.faq.map(f => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } }));
+  result.jsonld = JSON.stringify(jsonld, null, 2);
+  result.todo_count = (JSON.stringify(d).match(/【待訪談補充/g) || []).length;
+  Object.assign(result.checks[7], { status: result.todo_count ? 'warn' : 'pass', detail: result.todo_count ? `還有 ${result.todo_count} 處要等訪談補充` : '文案沒有待補標記。' });
+  return result;
+}
 const mockData = [mockKeywords, mockInterview, mockOutline, mockDraft, mockPublish];
 
 function notify(message) {
@@ -208,8 +230,46 @@ function interviewView(data) {
 function outlineView(data) {
   return `<h3 class="outline-title">${richText(data.h1)}</h3><div class="answer-plan"><strong>開頭回答計畫</strong><p>${richText(data.answer_plan)}</p></div>${data.sections.map((section, i) => `<section class="outline-section"><h3><span>${String(i + 1).padStart(2, '0')}</span>${richText(section.h2)}</h3>${list(section.points)}</section>`).join('')}<section class="outline-section"><h3>常見問答</h3>${list(data.faq)}</section>`;
 }
+function fillPanelView() {
+  if (!fillPanel) return '';
+  const panel = fillPanel;
+  const sources = panel.sources.filter(url => { try { return ['http:', 'https:'].includes(new URL(url).protocol); } catch { return false; } });
+  return `<section class="fill-panel" aria-label="補上資訊"><strong>${escapeHTML(panel.placeholder)}</strong><label for="fill-text">要補上的內容</label><textarea id="fill-text" rows="4">${escapeHTML(panel.text)}</textarea><div class="fill-actions"><button data-action="fill-search" ${panel.running ? 'disabled' : ''}>${panel.running ? `正在上網查… ${Math.floor((Date.now() - panel.started) / 1000)} 秒` : '請 AI 上網查'}</button><button data-action="fill-apply" ${state.busy ? 'disabled' : ''}>補上</button><button data-action="fill-cancel">取消</button></div><p role="status">${escapeHTML(panel.message)}</p>${sources.length ? `<ul>${sources.map(url => `<li><a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a></li>`).join('')}</ul>` : ''}</section>`;
+}
+function socialView() {
+  if (socialState.running) return `<p role="status">正在改寫成社群貼文… <span id="social-seconds">${Math.floor((Date.now() - socialState.started) / 1000)}</span> 秒</p>`;
+  if (!socialState.result) return `<div class="error-state"><p>${escapeHTML(socialState.error || '請選擇平台，產生貼文。')}</p><button data-action="social-retry">再試一次</button></div>`;
+  const data = socialState.result.data[draftPlatform];
+  return `<div class="social-layout"><article class="social-post"><header><strong>${draftPlatform === 'threads' ? 'Threads' : 'Instagram'}</strong>${sourceLabel(socialState.result, 3)}</header><p class="social-text">${escapeHTML(data.text ?? data.caption)}</p><p class="social-tags">${data.hashtags.map(tag => '#' + escapeHTML(tag)).join(' ')}</p></article><button data-action="copy-social">複製貼文</button></div>`;
+}
+async function loadSocial() {
+  if (socialState.result || socialState.running || state.stages[3].status !== 'done') return;
+  const current = socialState;
+  current.running = true; current.started = Date.now(); current.error = ''; renderCard();
+  try {
+    const result = mockMode ? (await wait(600), { ok: true, mock: true, elapsed_ms: 600, data: structuredClone(mockSocial) }) : await request('/api/stage/social', { ...payloadFor(3, false), draft: state.stages[3].result.data });
+    if (socialState === current) current.result = result;
+  } catch (error) { if (socialState === current) current.error = error.message; }
+  finally { current.running = false; if (socialState === current && state.active === 3) renderCard(); }
+}
+async function searchFill() {
+  const panel = fillPanel;
+  if (!panel || panel.running) return;
+  panel.running = true; panel.started = Date.now(); panel.message = ''; panel.sources = []; renderCard();
+  try {
+    const result = mockMode ? (await wait(600), { ok: true, mock: true, data: structuredClone(mockFill) }) : await request('/api/fill', { placeholder: panel.placeholder, subject: state.stages[0].result.data.subject, brand: state.input.brand });
+    if (fillPanel !== panel) return;
+    if (result.data.found) {
+      panel.text = result.data.text; panel.sources = result.data.sources;
+      panel.message = 'AI 查到的內容，請確認後再補上。';
+    } else panel.message = '查不到可靠的資料，可以自己填，或留給訪談。';
+  } catch (error) { if (fillPanel === panel) panel.message = error.message; }
+  finally { panel.running = false; if (fillPanel === panel && state.active === 3) renderCard(); }
+}
 function draftView(data) {
-  return `${/【待訪談補充/.test(JSON.stringify(data)) ? '<p class="fill-hint">點黃色的標記，就能自己補上資訊。</p>' : ''}<article class="article"><h3 class="article-title">${richText(data.title)}</h3><div class="answer-box"><strong>AI 最容易引用的一段</strong><p>${richText(data.answer)}</p></div>${data.sections.map((section) => `<section><h3>${richText(section.h2)}</h3>${section.body.split(/\n\s*\n/).map((p) => `<p>${richText(p)}</p>`).join('')}</section>`).join('')}<section><h3>常見問答</h3>${data.faq.map((item) => `<div class="faq-item"><h4>${richText(item.q)}</h4><p>${richText(item.a)}</p></div>`).join('')}</section><p style="margin-top:26px">${richText(data.cta)}</p></article>`;
+  const tabs = `<div class="draft-tabs" aria-label="文案平台">${[['website', '網站文章'], ['threads', 'Threads'], ['instagram', 'Instagram']].map(([platform, label]) => `<button data-action="draft-platform" data-platform="${platform}" aria-pressed="${draftPlatform === platform}">${label}</button>`).join('')}</div>`;
+  if (draftPlatform !== 'website') return tabs + socialView();
+  return `${tabs}${/【待訪談補充/.test(JSON.stringify(data)) ? '<p class="fill-hint">點黃色的標記：可以自己補，或請 AI 上網查。</p>' : ''}${fillPanelView()}<article class="article"><h3 class="article-title">${richText(data.title)}</h3><div class="answer-box"><strong>AI 最容易引用的一段</strong><p>${richText(data.answer)}</p></div>${data.sections.map((section) => `<section><h3>${richText(section.h2)}</h3>${section.body.split(/\n\s*\n/).map((p) => `<p>${richText(p)}</p>`).join('')}</section>`).join('')}<section><h3>常見問答</h3>${data.faq.map((item) => `<div class="faq-item"><h4>${richText(item.q)}</h4><p>${richText(item.a)}</p></div>`).join('')}</section><p style="margin-top:26px">${richText(data.cta)}</p></article>`;
 }
 function publishView(data) {
   const draft = state.stages[3].result.data;
@@ -227,7 +287,7 @@ function renderCard() {
   card.style.setProperty('--stage-color', colors[i]);
   let actions = '', content = '';
   if (stage.status === 'done') {
-    actions = sourceLabel(stage.result, i) + (i < 4 ? `<button class="small-button" data-action="regenerate" ${state.busy ? 'disabled' : ''}>重新生成</button>` : '');
+    actions = (i === 3 && draftPlatform !== 'website' ? (socialState.result ? sourceLabel(socialState.result, i) : '') : sourceLabel(stage.result, i)) + (i < 4 ? `<button class="small-button" data-action="regenerate" ${state.busy ? 'disabled' : ''}>重新生成</button>` : '');
     content = [keywordsView, interviewView, outlineView, draftView, publishView][i](stage.result.data);
   } else if (stage.status === 'failed') {
     content = `<div class="error-state"><h3>這一步還沒完成</h3><p>${escapeHTML(stage.error)}</p><button data-action="retry" ${state.busy ? 'disabled' : ''}>再試一次</button></div>`;
@@ -241,6 +301,7 @@ function renderCard() {
 }
 function render() { renderSteps(); renderCard(); updateControls(); }
 function invalidate(indices) {
+  if (indices.includes(3)) clearDraftExtras();
   for (const i of indices) state.stages[i] = { status: 'stale', result: null, error: '', started: 0 };
 }
 function payloadFor(i, force) {
@@ -255,13 +316,14 @@ async function runStage(i, force = false) {
   if (state.stages[i].status === 'done' && !force) return true;
   if (!dependencies[i].every((dep) => state.stages[dep].status === 'done')) return false;
   const stage = state.stages[i];
+  if (i === 3) clearDraftExtras();
   stage.status = 'running'; stage.error = ''; stage.started = Date.now(); stage.result = null;
   render();
   try {
     let result;
     if (mockMode) {
       await wait(600);
-      result = { ok: true, cached: false, mock: true, generated_at: new Date().toISOString(), elapsed_ms: 600, data: structuredClone(mockData[i]) };
+      result = { ok: true, cached: false, mock: true, generated_at: new Date().toISOString(), elapsed_ms: 600, data: i === 4 ? mockPublishForDraft() : structuredClone(mockData[i]) };
     } else result = await request(`/api/stage/${keys[i]}`, payloadFor(i, force));
     stage.result = result; stage.elapsed = Date.now() - stage.started; stage.status = 'done';
     if (!state.manual) state.active = i;
@@ -282,6 +344,7 @@ async function runPipeline() {
 }
 async function startProduction() {
   if (state.busy || state.loading || charCount($('material-text').value.trim()) <= 40) return;
+  clearDraftExtras();
   state.busy = true; state.manual = false; state.active = 0;
   $('ref-status').textContent = '';
   state.stages = keys.map(() => ({ status: 'waiting', result: null, error: '', started: 0 }));
@@ -373,6 +436,12 @@ $('stage-card').addEventListener('click', async (event) => {
   const button = event.target.closest('[data-action]');
   if (!button || button.disabled) return;
   const action = button.dataset.action;
+  if (action === 'draft-platform') { draftPlatform = button.dataset.platform; renderCard(); if (draftPlatform !== 'website') await loadSocial(); return; }
+  if (action === 'social-retry') { await loadSocial(); return; }
+  if (action === 'copy-social') { const data = socialState.result?.data[draftPlatform]; if (data) await copyText((data.text ?? data.caption) + '\n\n' + data.hashtags.map(tag => '#' + tag).join(' ')); return; }
+  if (action === 'fill-search') { await searchFill(); return; }
+  if (action === 'fill-cancel') { fillPanel = null; renderCard(); return; }
+  if (action === 'fill-apply') { await applyFill(); return; }
   if (action === 'regenerate' || action === 'retry') { await rerun(state.active, action === 'regenerate'); return; }
   const result = state.stages[state.active].result;
   if (!result) return;
@@ -387,24 +456,34 @@ $('stage-card').addEventListener('click', async (event) => {
   }
 });
 $('material-text').addEventListener('input', () => { updateControls(); note(charCount($('material-text').value.trim()) > 40 ? '素材準備好了，可以開始。' : '超過 40 字，就能開始。'); });
-// Zita 的需求：待補的資訊可以自己填。點文案裡黃色的「待訪談補充」，打字補上，上架包的檢查會跟著更新。
-$('stage-card').addEventListener('click', async (event) => {
+// 待補內容先供編輯確認，再更新文章與上架包。
+$('stage-card').addEventListener('input', (event) => {
+  if (event.target.id === 'fill-text' && fillPanel) fillPanel.text = event.target.value;
+});
+$('stage-card').addEventListener('click', (event) => {
   const markEl = event.target.closest('.article mark');
   if (!markEl || state.busy || state.stages[3].status !== 'done') return;
-  const placeholder = markEl.textContent;
-  const value = window.prompt(`補上這一段的資訊：\n${placeholder}`, '');
-  if (!value || !value.trim()) return;
+  fillPanel = { placeholder: markEl.textContent, text: '', sources: [], message: '', running: false };
+  renderCard();
+  document.querySelector('.fill-panel')?.scrollIntoView({ block: 'nearest' });
+  $('fill-text')?.focus();
+});
+async function applyFill() {
+  if (!fillPanel || state.busy || !fillPanel.text.trim()) return;
+  const { placeholder, text: value } = fillPanel;
   const draft = state.stages[3].result.data;
   const swap = (text) => (typeof text === 'string' ? text.split(placeholder).join(value.trim()) : text);
   draft.title = swap(draft.title); draft.answer = swap(draft.answer); draft.cta = swap(draft.cta);
   draft.sections.forEach((section) => { section.h2 = swap(section.h2); section.body = swap(section.body); });
   draft.faq.forEach((item) => { item.q = swap(item.q); item.a = swap(item.a); });
+  clearDraftExtras();
   state.stages[4] = { status: 'waiting', result: null, error: '', started: 0 };
-  state.manual = true; state.active = 3; render();
-  await runStage(4, true);
-  state.active = 3; render();
-  notify('已補上。上架包的檢查也更新了。');
-});
+  state.busy = true; state.manual = true; state.active = 3; render();
+  try {
+    const completed = await runStage(4, true);
+    notify(completed ? '已補上。上架包的檢查也更新了。' : '已補上。上架包尚未更新，請到上架包再試一次。');
+  } finally { state.busy = false; render(); }
+}
 $('start').addEventListener('click', startProduction);
 $('choose-file').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', uploadFile);
@@ -421,7 +500,12 @@ const initialBrand = loadBrand().catch((error) => {
 });
 void loadHealth();
 render();
-setInterval(() => { if (state.busy) renderSteps(); }, 500);
+setInterval(() => {
+  if (state.busy) renderSteps();
+  if (socialState.running && $('social-seconds')) $('social-seconds').textContent = Math.floor((Date.now() - socialState.started) / 1000);
+  const searchButton = document.querySelector('[data-action="fill-search"]');
+  if (fillPanel?.running && searchButton) searchButton.textContent = `正在上網查… ${Math.floor((Date.now() - fillPanel.started) / 1000)} 秒`;
+}, 500);
 
 // 示範深連結：網址帶 ?shot=0..5 會自動載入素材；1–5 會跑完流程（有保存結果就秒回）並停在該階段。錄影片截圖用。
 const shotParam = new URLSearchParams(location.search).get('shot');

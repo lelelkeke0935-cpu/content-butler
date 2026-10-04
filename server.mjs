@@ -9,8 +9,8 @@ import { spawn } from 'node:child_process';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const MOCK = process.env.MOCK_AI === '1';
 const CACHE = path.join(ROOT, 'data/cache.json');
-const stages = ['keywords', 'interview', 'outline', 'draft'];
-const schemas = Object.fromEntries(await Promise.all(stages.map(async s => [s, JSON.parse(await fs.readFile(path.join(ROOT, `schemas/${s}.json`), 'utf8'))])));
+const stages = ['keywords', 'interview', 'outline', 'draft', 'social'];
+const schemas = Object.fromEntries(await Promise.all([...stages, 'fill'].map(async s => [s, JSON.parse(await fs.readFile(path.join(ROOT, `schemas/${s}.json`), 'utf8'))])));
 let cache = Object.create(null);
 try { const saved = JSON.parse(await fs.readFile(CACHE, 'utf8')); if (saved && typeof saved === 'object' && !Array.isArray(saved)) cache = Object.assign(Object.create(null), saved); } catch {}
 let writes = Promise.resolve();
@@ -30,6 +30,7 @@ function validate(schema, value) {
   if (schema.type === 'object') return object(value) && schema.required.every(k => Object.hasOwn(value, k)) && Object.keys(value).every(k => Object.hasOwn(schema.properties, k) && validate(schema.properties[k], value[k]));
   if (schema.type === 'array') return Array.isArray(value) && value.length >= (schema.minItems ?? 0) && value.length <= (schema.maxItems ?? Infinity) && value.every(v => validate(schema.items, v));
   if (schema.type === 'string') return typeof value === 'string' && (!schema.enum || schema.enum.includes(value)) && [...value].length >= (schema.minLength ?? 0) && [...value].length <= (schema.maxLength ?? Infinity) && (!schema.pattern || new RegExp(schema.pattern).test(value));
+  if (schema.type === 'boolean') return typeof value === 'boolean';
   return false;
 }
 const localBin = path.join(os.homedir(), '.local/node/bin');
@@ -62,7 +63,8 @@ let running = 0;
 async function ai(stage, input) {
   if (typeof input.material !== 'string' || !input.material.trim() || !object(input.brand)) fail('請提供素材與品牌資料。');
   if (stage !== 'keywords' && !validate(schemas.keywords, input.keywords)) fail('請先完成關鍵字。');
-  if (stage === 'draft' && !validate(schemas.outline, input.outline)) fail('請先完成文章架構。');
+  if (['draft', 'social'].includes(stage) && !validate(schemas.outline, input.outline)) fail('請先完成文章架構。');
+  if (stage === 'social' && !validate(schemas.draft, input.draft)) fail('請先完成文案。');
   const id = key(stage, input);
   if (!input.force && cache[id]?.mock === MOCK && (stage !== 'interview' || validate(schemas.interview, cache[id].data))) return { ...cache[id], cached: true };
   if (running >= 3) fail('目前有三個階段進行中，請稍後再試。', 429);
@@ -75,7 +77,7 @@ async function ai(stage, input) {
     else {
       const template = await fs.readFile(path.join(ROOT, `prompts/${stage}.md`), 'utf8');
       const values = { ...input, material: [...input.material].slice(0, 6000).join('') };
-      const prompt = template.replace(/\{\{(material|brand|keywords|outline)\}\}/g, (_, k) => typeof values[k] === 'string' ? values[k] : JSON.stringify(values[k] ?? {}));
+      const prompt = template.replace(/\{\{(material|brand|keywords|outline|draft)\}\}/g, (_, k) => typeof values[k] === 'string' ? values[k] : JSON.stringify(values[k] ?? {}));
       dir = await fs.mkdtemp(path.join(os.tmpdir(), 'content-ai-'));
       const output = path.join(dir, 'result.json');
       const r = await run(codexBin(), ['exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-c', 'model_reasoning_effort="low"', '-C', dir, '--output-schema', path.join(ROOT, `schemas/${stage}.json`), '-o', output, '-'], prompt);
@@ -87,6 +89,30 @@ async function ai(stage, input) {
     cache[id] = result;
     await saveCache();
     return result;
+  } finally { running--; if (dir) await fs.rm(dir, { recursive: true, force: true }); }
+}
+async function fill(input) {
+  if (typeof input.placeholder !== 'string' || !input.placeholder.trim() || typeof input.subject !== 'string' || !input.subject.trim() || !object(input.brand)) fail('請提供待補項目、創作者與品牌資料。');
+  if (running >= 3) fail('目前有三個階段進行中，請稍後再試。', 429);
+  running++;
+  const started = Date.now();
+  let dir;
+  try {
+    let data;
+    if (MOCK) data = JSON.parse(await fs.readFile(path.join(ROOT, 'samples/mock.json'), 'utf8')).fill;
+    else {
+      const template = await fs.readFile(path.join(ROOT, 'prompts/fill.md'), 'utf8');
+      const prompt = template.replace(/\{\{(placeholder|subject|brand)\}\}/g, (_, k) => typeof input[k] === 'string' ? input[k] : JSON.stringify(input[k]));
+      dir = await fs.mkdtemp(path.join(os.tmpdir(), 'content-fill-'));
+      const output = path.join(dir, 'result.json');
+      const r = await run(codexBin(), ['--search', 'exec', '--skip-git-repo-check', '--ephemeral', '-s', 'read-only', '-c', 'model_reasoning_effort="low"', '-C', dir, '--output-schema', path.join(ROOT, 'schemas/fill.json'), '-o', output, '-'], prompt, 120000);
+      if (r.code !== 0) fail('AI 查詢未完成，請確認 Codex 登入後再試。', 502);
+      try { data = JSON.parse(await fs.readFile(output, 'utf8')); } catch { fail('AI 回傳格式無法讀取，請再查一次。', 502); }
+    }
+    if (!validate(schemas.fill, data)) fail('AI 回傳格式不完整，請再查一次。', 502);
+    if (data.found && (!data.text.trim() || !data.sources.length || data.sources.some(source => { try { return !['http:', 'https:'].includes(new URL(source).protocol); } catch { return true; } }))) fail('AI 沒有提供可核對的出處，請再查一次。', 502);
+    if (!data.found) data = { found: false, text: '', sources: [] };
+    return { ok: true, mock: MOCK, elapsed_ms: Date.now() - started, data };
   } finally { running--; if (dir) await fs.rm(dir, { recursive: true, force: true }); }
 }
 function clean(text) {
@@ -262,6 +288,7 @@ const server = http.createServer(async (req, res) => {
         else {
           const input = parse(bytes);
           if (url.pathname === '/api/brand') result = await brand(input);
+          else if (url.pathname === '/api/fill') result = await fill(input);
           else if (url.pathname === '/api/stage/publish') result = publish(input);
           else if (url.pathname.startsWith('/api/stage/') && stages.includes(url.pathname.slice('/api/stage/'.length))) result = await ai(url.pathname.slice('/api/stage/'.length), input);
           else fail('找不到這個功能。', 404);

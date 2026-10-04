@@ -43,6 +43,7 @@ function strictSchema(schema) {
 function match(schema, value) {
   if (schema.type === 'object') { assert.deepEqual(Object.keys(value).sort(), [...schema.required].sort()); for (const k of schema.required) match(schema.properties[k], value[k]); }
   else if (schema.type === 'array') { assert.ok(Array.isArray(value)); assert.ok(value.length >= (schema.minItems ?? 0) && value.length <= (schema.maxItems ?? Infinity)); value.forEach(v => match(schema.items, v)); }
+  else if (schema.type === 'boolean') assert.equal(typeof value, 'boolean');
   else { assert.equal(typeof value, 'string'); if (schema.enum) assert.ok(schema.enum.includes(value)); if (schema.maxLength) assert.ok([...value].length <= schema.maxLength); }
 }
 try {
@@ -50,7 +51,7 @@ try {
   await fs.mkdir(path.join(temp, 'public')); await fs.writeFile(path.join(temp, 'public/index.html'), '<!doctype html><title>離線測試</title>');
   await fs.mkdir(path.join(temp, 'materials'));
   const schema = {};
-  for (const stage of ['keywords', 'interview', 'outline', 'draft']) { schema[stage] = JSON.parse(await fs.readFile(path.join(temp, `schemas/${stage}.json`))); strictSchema(schema[stage]); }
+  for (const stage of ['keywords', 'interview', 'outline', 'draft', 'social', 'fill']) { schema[stage] = JSON.parse(await fs.readFile(path.join(temp, `schemas/${stage}.json`))); strictSchema(schema[stage]); }
   await start();
   const home = await fetch(base); check(home.ok && home.headers.get('content-type').includes('text/html'), '靜態首頁');
   let r = await request('/api/health'); check(r.data.ok && r.data.mock === true && r.data.cache_entries === 0 && ['logged-in', 'not-logged-in', 'missing'].includes(r.data.codex), '健康狀態');
@@ -108,8 +109,8 @@ try {
   await new Promise(resolve => fixture.close(resolve)); fixture = null;
   r = await request('/api/brand', { url: origin, force: true }); check(r.data.ok === false && typeof r.data.error === 'string', '離線抓取失敗可回應');
   const data = {}, responses = {};
-  for (const stage of ['keywords', 'interview', 'outline', 'draft']) {
-    const input = { material, brand, ...(stage === 'keywords' ? {} : { keywords: data.keywords }), ...(stage === 'draft' ? { outline: data.outline } : {}) };
+  for (const stage of ['keywords', 'interview', 'outline', 'draft', 'social']) {
+    const input = { material, brand, ...(stage === 'keywords' ? {} : { keywords: data.keywords }), ...(['draft', 'social'].includes(stage) ? { outline: data.outline } : {}), ...(stage === 'social' ? { draft: data.draft } : {}) };
     r = await request('/api/stage/' + stage, input);
     const v = r.data; check(v.ok && !v.cached && v.mock && Number.isFinite(Date.parse(v.generated_at)) && Number.isFinite(v.elapsed_ms) && v.elapsed_ms >= 0, stage + ' 外層');
     match(schema[stage], v.data); data[stage] = v.data; responses[stage] = { input, result: v };
@@ -119,6 +120,24 @@ try {
     const forced = (await request('/api/stage/' + stage, { ...input, force: true })).data;
     check(forced.ok && !forced.cached && forced.mock, stage + ' 重新生成');
   }
+  check(!JSON.stringify(data.social).includes('【待訪談補充') && !JSON.stringify(data.social).includes('#'), '社群省略待補標記與井號');
+  const fillInput = { placeholder: '【待訪談補充：作品材質】', subject: data.keywords.subject, brand };
+  const mockPath = path.join(temp, 'samples/mock.json');
+  const sample = JSON.parse(await fs.readFile(mockPath, 'utf8'));
+  r = await request('/api/fill', fillInput);
+  check(r.data.ok && r.data.mock && Number.isFinite(r.data.elapsed_ms) && !Object.hasOwn(r.data, 'cached'), '查詢外層');
+  match(schema.fill, r.data.data);
+  assert.deepEqual(r.data.data, sample.fill);
+  check(!r.data.data.found && r.data.data.text === '' && r.data.data.sources.length === 0, '查無資料');
+  sample.fill = { found: true, text: '離線測試句子。', sources: ['https://example.com/fixture'] };
+  await fs.writeFile(mockPath, JSON.stringify(sample));
+  r = await request('/api/fill', fillInput);
+  match(schema.fill, r.data.data);
+  check(r.data.data.found && r.data.data.text === sample.fill.text && r.data.data.sources[0] === sample.fill.sources[0], '查到資料附出處且不使用快取');
+  sample.fill.sources = [];
+  await fs.writeFile(mockPath, JSON.stringify(sample));
+  r = await request('/api/fill', fillInput);
+  check(r.status === 502 && !r.data.ok, '缺少出處不採用');
   r = await request('/api/stage/publish', { draft: data.draft, brand, keywords: data.keywords });
   check(r.data.ok, '上架包');
   const published = r.data.data;
@@ -132,7 +151,7 @@ try {
   const changed = structuredClone(data.draft); changed.answer = '<script>alert("x")</script>'; changed.faq = []; changed.handle = 'Bad slug';
   r = await request('/api/stage/publish', { draft: changed, brand, keywords: data.keywords });
   check(!r.data.data.html.includes('<script>') && r.data.data.html.includes('&lt;script&gt;') && r.data.data.checks[0].status === 'warn' && r.data.data.checks[2].status === 'fail' && r.data.data.checks[6].status === 'fail', '跳脫與失敗檢查');
-  for (const [route, input] of [['/api/stage/draft', {}], ['/api/stage/publish', {}], ['/api/brand', { url: 'file:///tmp/test' }], ['/api/unknown', {}]]) {
+  for (const [route, input] of [['/api/fill', {}], ['/api/stage/social', {}], ['/api/stage/social', { material, brand, keywords: data.keywords, outline: data.outline }], ['/api/stage/draft', {}], ['/api/stage/publish', {}], ['/api/brand', { url: 'file:///tmp/test' }], ['/api/unknown', {}]]) {
     r = await request(route, input); check(r.status >= 400 && r.data.ok === false && typeof r.data.error === 'string', '錯誤回應');
   }
   r = await request('/api/material', undefined, { method: 'POST', body: '{' }); check(r.status === 400 && !r.data.ok, '不完整 JSON');
@@ -148,7 +167,7 @@ try {
   r = await request('/api/stage/interview', responses.interview.input);
   check(r.data.ok && !r.data.cached && r.data.data.facts.every(f => f.source === '素材'), '舊訪綱快取補齊出處');
   r = await request('/api/stage/keywords', responses.keywords.input); check(r.data.cached && r.data.mock, '重啟後快取');
-  r = await request('/api/health'); check(r.data.ok && r.data.cache_entries === 5, '請求出錯後仍可服務');
+  r = await request('/api/health'); check(r.data.ok && r.data.cache_entries === 6, '請求出錯後仍可服務');
   console.log(`PASS：${passed} 項檢查，全 API 離線流程完成。`);
 } catch (e) { console.error('FAIL：' + e.message); process.exitCode = 1; }
 finally { await stop(); if (fixture) await new Promise(resolve => fixture.close(resolve)); await fs.rm(temp, { recursive: true, force: true }); }
