@@ -209,7 +209,7 @@ function outlineView(data) {
   return `<h3 class="outline-title">${richText(data.h1)}</h3><div class="answer-plan"><strong>開頭回答計畫</strong><p>${richText(data.answer_plan)}</p></div>${data.sections.map((section, i) => `<section class="outline-section"><h3><span>${String(i + 1).padStart(2, '0')}</span>${richText(section.h2)}</h3>${list(section.points)}</section>`).join('')}<section class="outline-section"><h3>常見問答</h3>${list(data.faq)}</section>`;
 }
 function draftView(data) {
-  return `<article class="article"><h3 class="article-title">${richText(data.title)}</h3><div class="answer-box"><strong>AI 最容易引用的一段</strong><p>${richText(data.answer)}</p></div>${data.sections.map((section) => `<section><h3>${richText(section.h2)}</h3>${section.body.split(/\n\s*\n/).map((p) => `<p>${richText(p)}</p>`).join('')}</section>`).join('')}<section><h3>常見問答</h3>${data.faq.map((item) => `<div class="faq-item"><h4>${richText(item.q)}</h4><p>${richText(item.a)}</p></div>`).join('')}</section><p style="margin-top:26px">${richText(data.cta)}</p></article>`;
+  return `${/【待訪談補充/.test(JSON.stringify(data)) ? '<p class="fill-hint">點黃色的標記，就能自己補上資訊。</p>' : ''}<article class="article"><h3 class="article-title">${richText(data.title)}</h3><div class="answer-box"><strong>AI 最容易引用的一段</strong><p>${richText(data.answer)}</p></div>${data.sections.map((section) => `<section><h3>${richText(section.h2)}</h3>${section.body.split(/\n\s*\n/).map((p) => `<p>${richText(p)}</p>`).join('')}</section>`).join('')}<section><h3>常見問答</h3>${data.faq.map((item) => `<div class="faq-item"><h4>${richText(item.q)}</h4><p>${richText(item.a)}</p></div>`).join('')}</section><p style="margin-top:26px">${richText(data.cta)}</p></article>`;
 }
 function publishView(data) {
   const draft = state.stages[3].result.data;
@@ -387,6 +387,24 @@ $('stage-card').addEventListener('click', async (event) => {
   }
 });
 $('material-text').addEventListener('input', () => { updateControls(); note(charCount($('material-text').value.trim()) > 40 ? '素材準備好了，可以開始。' : '超過 40 字，就能開始。'); });
+// Zita 的需求：待補的資訊可以自己填。點文案裡黃色的「待訪談補充」，打字補上，上架包的檢查會跟著更新。
+$('stage-card').addEventListener('click', async (event) => {
+  const markEl = event.target.closest('.article mark');
+  if (!markEl || state.busy || state.stages[3].status !== 'done') return;
+  const placeholder = markEl.textContent;
+  const value = window.prompt(`補上這一段的資訊：\n${placeholder}`, '');
+  if (!value || !value.trim()) return;
+  const draft = state.stages[3].result.data;
+  const swap = (text) => (typeof text === 'string' ? text.split(placeholder).join(value.trim()) : text);
+  draft.title = swap(draft.title); draft.answer = swap(draft.answer); draft.cta = swap(draft.cta);
+  draft.sections.forEach((section) => { section.h2 = swap(section.h2); section.body = swap(section.body); });
+  draft.faq.forEach((item) => { item.q = swap(item.q); item.a = swap(item.a); });
+  state.stages[4] = { status: 'waiting', result: null, error: '', started: 0 };
+  state.manual = true; state.active = 3; render();
+  await runStage(4, true);
+  state.active = 3; render();
+  notify('已補上。上架包的檢查也更新了。');
+});
 $('start').addEventListener('click', startProduction);
 $('choose-file').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', uploadFile);

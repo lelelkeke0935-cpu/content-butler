@@ -3,3 +3,5 @@
 #ref-urls{min-height:0;margin-top:7px}#ref-status{font-size:18px;color:var(--muted);overflow-wrap:anywhere}#ref-status p{margin-top:6px}.fact-source{display:inline-block;margin-left:6px;vertical-align:baseline}
 
 .brand-logo{height:74px;width:auto;display:block;background:#fff;border:2px solid var(--ink);padding:4px 12px;box-shadow:4px 4px 0 var(--ink);transform:rotate(-1.5deg)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.identity .tagline{font-weight:700;font-size:19px;margin:0 0 0 6px}
+
+.article mark{cursor:pointer;border-bottom:2px dashed var(--ink)}.article mark:hover{background:var(--yellow)}.fill-hint{margin:0 0 14px;font-size:15px;font-weight:700;color:var(--muted)}
