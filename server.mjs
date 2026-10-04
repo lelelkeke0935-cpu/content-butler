@@ -188,12 +188,13 @@ function publish(input) {
   const check = (id, label, yes, detail, bad = 'warn') => ({ id, label, status: yes ? 'pass' : bad, detail });
   const checks = [
     check('answer_first', '開頭直接回答', between(d.answer, 40, 130), `開頭共 ${length(d.answer)} 字。`),
-    check('keyword_in_title', '標題有主關鍵字或主角名', [k.primary, k.subject].some(s => typeof s === 'string' && s.length && d.title.includes(s)), '標題需含主關鍵字或主角名。'),
+    (ok => check('keyword_in_title', '標題有主關鍵字或主角名', ok, ok ? '標題已包含主關鍵字或主角名。' : '標題還沒有主關鍵字或主角名。'))([k.primary, k.subject].some(s => typeof s === 'string' && s.length && d.title.includes(s))),
     check('has_faq', '有常見問答', d.faq.length >= 3, `目前有 ${d.faq.length} 題。`, 'fail'),
     check('seo_title_len', '搜尋標題長度', between(d.seo_title, 10, 32), `搜尋標題共 ${length(d.seo_title)} 字。`),
     check('meta_len', '搜尋描述長度', between(d.meta_description, 50, 90), `搜尋描述共 ${length(d.meta_description)} 字。`),
-    check('brand_mentioned', '有提到品牌', typeof b.name === 'string' && b.name.length > 0 && full.toLowerCase().includes(b.name.toLowerCase()), '全文需提到品牌名稱。'),
-    check('handle_format', '網址代稱格式', /^[a-z0-9]+(-[a-z0-9]+)*$/.test(d.handle), '請使用小寫英數與連字號。', 'fail'),
+    // 品牌名可能是「Cornven Official」這種全名，文章裡通常只寫第一個詞，所以用第一個詞比對
+    (ok => check('brand_mentioned', '有提到品牌', ok, ok ? '文章有提到品牌名稱。' : '全文還沒提到品牌名稱。'))(typeof b.name === 'string' && b.name.trim().length > 0 && full.toLowerCase().includes(b.name.trim().split(/\s+/)[0].toLowerCase())),
+    (ok => check('handle_format', '網址代稱格式', ok, ok ? '網址代稱格式正確。' : '請改用小寫英數與連字號。', 'fail'))(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(d.handle)),
     check('no_placeholder', '沒有待補的地方', todo_count === 0, todo_count ? `還有 ${todo_count} 處要等訪談補充` : '文案沒有待補標記。'),
   ];
   const p = text => `<p>${escapeHTML(text)}</p>`;
