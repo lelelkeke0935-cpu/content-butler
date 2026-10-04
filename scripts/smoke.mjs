@@ -6,6 +6,7 @@ import http from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createHash } from 'node:crypto';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'content-smoke-'));
@@ -23,7 +24,7 @@ async function start() {
   child.on('error', e => { logs += e.message; });
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error('測試伺服器啟動失敗：' + logs);
-    if (logs.includes('內容管家：http://127.0.0.1:8991')) return;
+    if (logs.includes('稿定管家：http://127.0.0.1:8991')) return;
     await delay(50);
   }
   throw new Error('測試伺服器啟動逾時。');
@@ -59,6 +60,7 @@ try {
   r = await request('/api/sample'); check(r.data.private && r.data.text === '離線測試素材', '私人素材優先');
   r = await request('/api/material', { text: '\u200e第一行\n第一行\n\n\n第二行\u202e\nhttps://example.invalid/' });
   check(r.data.text === '第一行\n\n第二行\nhttps://example.invalid/' && r.data.links.length === 1 && r.data.chars === [...r.data.text].length && r.data.source === 'text', '清理素材');
+  check(!Object.hasOwn(r.data, 'refs'), '沒有參考網址時維持原回應');
   for (const ext of ['txt', 'md']) {
     r = await request('/api/material', undefined, { method: 'POST', headers: { 'x-filename': encodeURIComponent('測試.' + ext) }, body: '文字\n文字' });
     check(r.data.text === '文字' && r.data.source === 'text', '文字上傳');
@@ -73,6 +75,7 @@ try {
   fixture = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (req.url === '/') res.end('<html lang="zh-TW"><title>紙岸小舖｜創作選物</title><meta content="紙岸小舖" property="og:site_name"><meta name="description" content="創作與日常"><script src="https://cdn.shopify.com/test.js"></script><a href="/collections/cards">明信片</a><a href="/collections/cards">明信片</a></html>');
+    else if (req.url === '/reference') res.end(`<html><head><title>參考 &amp; &#x1F33F;</title></head><body><script>隱藏腳本</script><style>隱藏樣式</style><noscript>隱藏文字</noscript><svg><text>隱藏圖形</text></svg><p>作品&nbsp;介紹 &lt;原文&gt; &#39;引句&#39;</p><p>${'🌿'.repeat(1600)}</p></body></html>`);
     else if (req.url === '/sitemap.xml' && !sitemapAvailable) { res.statusCode = 503; res.end(''); }
     else if (req.url === '/sitemap.xml') res.end(`<sitemapindex>${['products', 'collections', 'blogs'].map(s => `<sitemap><loc>${origin}/sitemap_${s}_1.xml</loc></sitemap>`).join('')}</sitemapindex>`);
     else if (req.url === '/sitemap_products_1.xml') res.end(`<urlset><url><loc>${origin}/products/card</loc></url></urlset>`);
@@ -81,6 +84,19 @@ try {
     else { res.statusCode = 404; res.end(''); }
   });
   await new Promise(resolve => fixture.listen(0, '127.0.0.1', resolve)); origin = `http://127.0.0.1:${fixture.address().port}`;
+  r = await request('/api/material', { text: '素材\n素材', refs: [origin + '/missing', origin] });
+  assert.deepEqual(r.data.refs, [
+    { url: origin + '/missing', ok: false, title: '', chars: 0 },
+    { url: origin, ok: true, title: '紙岸小舖｜創作選物', chars: 7 }
+  ]);
+  check(r.data.text === `素材\n\n【參考資料 1】紙岸小舖｜創作選物（${origin}）\n明信片 明信片`, '單頁失敗後仍接上參考資料');
+  check(r.data.chars === [...r.data.text].length && r.data.links.includes(origin), '參考資料字數與連結');
+  r = await request('/api/material', { text: '素材', refs: [origin + '/reference', origin, origin, origin + '/missing'] });
+  check(r.data.refs.length === 3 && r.data.refs.every(ref => ref.ok), '最多三個參考網址');
+  check(r.data.refs[0].title === '參考 & 🌿' && r.data.refs[0].chars === 1500 && !r.data.text.includes('隱藏') && r.data.text.includes("作品 介紹 <原文> '引句'"), '清除標籤、解碼實體與字數上限');
+  check(r.data.text.includes('【參考資料 2】') && r.data.text.includes('【參考資料 3】'), '成功來源依序編號');
+  r = await request('/api/material', { text: '素材', refs: ['file:///tmp/test', 42, origin] });
+  check(r.data.refs.length === 1 && r.data.refs[0].url === origin, '僅接收 http/https 字串');
   r = await request('/api/brand', { url: origin }); check(r.data.ok && !r.data.cached, '品牌解析');
   const brand = r.data.data;
   assert.deepEqual(brand.counts, { products: 1, collections: 1, articles: 1 }); assert.deepEqual(brand.collections, ['明信片']);
@@ -97,6 +113,7 @@ try {
     r = await request('/api/stage/' + stage, input);
     const v = r.data; check(v.ok && !v.cached && v.mock && Number.isFinite(Date.parse(v.generated_at)) && Number.isFinite(v.elapsed_ms) && v.elapsed_ms >= 0, stage + ' 外層');
     match(schema[stage], v.data); data[stage] = v.data; responses[stage] = { input, result: v };
+    if (stage === 'interview') check(v.data.facts.every(f => typeof f.source === 'string' && f.source === '素材'), '事實都有出處');
     const cached = (await request('/api/stage/' + stage, { ...input, force: false })).data;
     check(cached.cached && cached.mock && cached.generated_at === v.generated_at && cached.elapsed_ms === v.elapsed_ms, stage + ' 快取');
     const forced = (await request('/api/stage/' + stage, { ...input, force: true })).data;
@@ -121,7 +138,15 @@ try {
   r = await request('/api/material', undefined, { method: 'POST', body: '{' }); check(r.status === 400 && !r.data.ok, '不完整 JSON');
   r = await request('/api/material', undefined, { method: 'POST', headers: { 'x-filename': 'test.exe' }, body: 'test' }); check(r.status === 415, '檔案格式');
   r = await request('/api/material', undefined, { method: 'POST', body: Buffer.alloc(25 * 1024 * 1024 + 1, 32) }); check(r.status === 413 && !r.data.ok, '上傳大小限制');
-  await stop(); logs = ''; await start();
+  await stop();
+  const savedCachePath = path.join(temp, 'data/cache.json');
+  const savedCache = JSON.parse(await fs.readFile(savedCachePath, 'utf8'));
+  const interviewId = createHash('sha1').update('interview' + JSON.stringify(responses.interview.input)).digest('hex');
+  savedCache[interviewId].data.facts.forEach(f => { delete f.source; });
+  await fs.writeFile(savedCachePath, JSON.stringify(savedCache));
+  logs = ''; await start();
+  r = await request('/api/stage/interview', responses.interview.input);
+  check(r.data.ok && !r.data.cached && r.data.data.facts.every(f => f.source === '素材'), '舊訪綱快取補齊出處');
   r = await request('/api/stage/keywords', responses.keywords.input); check(r.data.cached && r.data.mock, '重啟後快取');
   r = await request('/api/health'); check(r.data.ok && r.data.cache_entries === 5, '請求出錯後仍可服務');
   console.log(`PASS：${passed} 項檢查，全 API 離線流程完成。`);

@@ -12,11 +12,15 @@
           "quote": {
             "type": "string",
             "maxLength": 20
+          },
+          "source": {
+            "type": "string"
           }
         },
         "required": [
           "fact",
-          "quote"
+          "quote",
+          "source"
         ],
         "additionalProperties": false
       },

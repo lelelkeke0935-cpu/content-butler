@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#FBF6EC">
-  <title>內容管家｜創作者的工作桌</title>
+  <title>稿定管家｜創作者的工作桌</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 </head>
 <body>
   <header class="page-header">
-    <div class="identity"><span class="logo-mark" aria-hidden="true">文<span>✦</span></span><div><h1>內容管家</h1><p>把創作者素材，變成 AI 找得到的文章</p></div></div>
+    <div class="identity"><img class="brand-logo" src="./logo.jpg" alt="稿定管家 Content Butler"><div><h1 class="sr-only">稿定管家</h1><p class="tagline">從素材到上架，幫你稿定。</p></div></div>
     <section id="brand-card" class="brand-card" aria-label="品牌資料"><strong>正在讀取品牌…</strong><p>整理品牌的內容起點</p></section>
     <div class="connection"><span id="health-dot" class="health-dot"></span><span id="health-text">Codex 連線中</span><button id="health-retry" class="text-button" hidden>再試一次</button></div>
   </header>
@@ -26,6 +26,10 @@
       <input id="brand-url" type="url" value="https://www.cornven.com/" spellcheck="false">
       <label for="material-text">創作者素材 <span class="label-note">訪談、介紹都可以</span></label>
       <textarea id="material-text" placeholder="貼上創作者介紹、作品故事或訪談紀錄。&#10;&#10;沒有提到的事實，會標記待訪談補充。" aria-describedby="material-count material-note"></textarea>
+      <label for="ref-urls">參考網址</label>
+      <small id="ref-help" class="label-note">一行一個，最多 3 個。AI 會讀它，並標出每個事實的出處。</small>
+      <textarea id="ref-urls" rows="2" aria-describedby="ref-help" spellcheck="false"></textarea>
+      <div id="ref-status" role="status" aria-live="polite"></div>
       <div class="material-tools"><button id="choose-file" class="small-button">＋ 選檔案</button><button id="load-sample" class="text-button">載入示範素材 ↗</button></div>
       <input id="file-input" type="file" accept=".docx,.txt,.md" hidden>
       <div class="material-meta"><span>支援文件、純文字、Markdown</span><strong id="material-count">0 字</strong></div>

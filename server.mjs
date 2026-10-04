@@ -64,7 +64,7 @@ async function ai(stage, input) {
   if (stage !== 'keywords' && !validate(schemas.keywords, input.keywords)) fail('請先完成關鍵字。');
   if (stage === 'draft' && !validate(schemas.outline, input.outline)) fail('請先完成文章架構。');
   const id = key(stage, input);
-  if (!input.force && cache[id]?.mock === MOCK) return { ...cache[id], cached: true };
+  if (!input.force && cache[id]?.mock === MOCK && (stage !== 'interview' || validate(schemas.interview, cache[id].data))) return { ...cache[id], cached: true };
   if (running >= 3) fail('目前有三個階段進行中，請稍後再試。', 429);
   running++;
   const started = Date.now();
@@ -96,7 +96,7 @@ function clean(text) {
   return out.join('\n').trim();
 }
 async function material(req, bytes) {
-  let text, source = 'text';
+  let text, source = 'text', refs;
   if (req.headers['x-filename']) {
     let filename;
     try { filename = decodeURIComponent(req.headers['x-filename']); } catch { fail('檔名無法讀取。'); }
@@ -111,10 +111,37 @@ async function material(req, bytes) {
         text = r.stdout; source = 'docx';
       } finally { await fs.rm(dir, { recursive: true, force: true }); }
     } else text = bytes.toString('utf8');
-  } else { const input = parse(bytes); if (typeof input.text !== 'string') fail('請提供素材文字。'); text = input.text; }
+  } else {
+    const input = parse(bytes);
+    if (typeof input.text !== 'string') fail('請提供素材文字。');
+    text = input.text;
+    if (Array.isArray(input.refs)) refs = input.refs.slice(0, 3).filter(url => {
+      if (typeof url !== 'string') return false;
+      try { return ['http:', 'https:'].includes(new URL(url).protocol); } catch { return false; }
+    });
+  }
   text = clean(text);
+  const refResults = [];
+  let refNumber = 0;
+  for (const url of refs || []) {
+    try {
+      // 要登入才看得到的網站，抓到的只會是登入頁，不能當參考資料
+      if (/(^|\.)(instagram|facebook|threads)\.(com|net)$/i.test(new URL(url).hostname)) throw new Error('login');
+      const html = await fetchText(url);
+      const visible = html.replace(/<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ');
+      const plain = value => decode(value.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+      const title = plain(visible.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] || '');
+      // 優先取 <main> 的內文，並去掉頁首、選單、頁尾，免得把「購物車」「登入」這類字當成資料
+      const body = visible.match(/<main\b[^>]*>([\s\S]*?)<\/main\s*>/i)?.[1] || visible.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i)?.[1] || visible.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/gi, ' ').replace(/<title\b[^>]*>[\s\S]*?<\/title\s*>/gi, ' ');
+      const content = body.replace(/<(header|nav|footer|aside|form)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ');
+      const excerpt = [...plain(content)].slice(0, 1500).join('');
+      if (!excerpt) throw new Error('empty');
+      refResults.push({ url, ok: true, title, chars: [...excerpt].length });
+      text += `\n\n【參考資料 ${++refNumber}】${title}（${url}）\n${excerpt}`;
+    } catch { refResults.push({ url, ok: false, title: '', chars: 0 }); }
+  }
   const links = [...new Set((text.match(/https?:\/\/[^\s<>"'，。；、）】]+/g) || []))];
-  return { ok: true, text, chars: [...text].length, links, source };
+  return { ok: true, text, chars: [...text].length, links, source, ...(refs === undefined ? {} : { refs: refResults }) };
 }
 const decode = s => s.replace(/&(?:amp|lt|gt|quot|apos|ndash|mdash|nbsp|hellip|#39|#\d+|#x[\da-f]+);/gi, v => {
   const named = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&#39;': "'", '&ndash;': '–', '&mdash;': '—', '&nbsp;': ' ', '&hellip;': '…' };
@@ -127,7 +154,7 @@ function attrs(tag) {
   return Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(m => [m[1].toLowerCase(), decode(m[2] ?? m[3] ?? m[4])]));
 }
 async function fetchText(url) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ContentHelper/1.0)' } });
+  const response = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36 ContentButler/1.0', 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' } });
   if (!response.ok) throw new Error('fetch');
   return response.text();
 }
@@ -254,4 +281,4 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { if (!res.headersSent && !res.destroyed) json(res, e.status || 500, { ok: false, error: e.status ? e.message : '這次處理未完成，請再試一次。' }); }
 });
 server.on('error', () => { console.error('伺服器無法啟動，請確認連接埠與執行權限。'); process.exitCode = 1; });
-server.listen(Number(process.env.PORT || 8990), '127.0.0.1', () => console.log(`內容管家：http://127.0.0.1:${server.address().port}`));
+server.listen(Number(process.env.PORT || 8990), '127.0.0.1', () => console.log(`稿定管家：http://127.0.0.1:${server.address().port}`));

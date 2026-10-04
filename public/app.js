@@ -36,11 +36,11 @@ const mockKeywords = {
 };
 const mockInterview = {
   facts: [
-    { fact: '林小禾經營小禾紙上散步。', quote: '創作者林小禾經營' },
-    { fact: '靈感來自植物、光影與散步風景。', quote: '街角植物、窗邊光影' },
-    { fact: '原創角色叫葉葉。', quote: '原創角色叫「葉葉」' },
-    { fact: '作品包含明信片與裝飾貼紙。', quote: '作品包含插畫明信片與裝飾貼紙' },
-    { fact: '先畫鉛筆草稿，再數位上色。', quote: '先用鉛筆畫草稿' }
+    { fact: '林小禾經營小禾紙上散步。', quote: '創作者林小禾經營', source: '素材' },
+    { fact: '靈感來自植物、光影與散步風景。', quote: '街角植物、窗邊光影', source: '素材' },
+    { fact: '原創角色叫葉葉。', quote: '原創角色叫「葉葉」', source: '素材' },
+    { fact: '作品包含明信片與裝飾貼紙。', quote: '作品包含插畫明信片與裝飾貼紙', source: '素材' },
+    { fact: '先畫鉛筆草稿，再數位上色。', quote: '先用鉛筆畫草稿', source: '素材' }
   ],
   missing: ['創作起點與品牌命名故事', '葉葉的角色設定', '紙張材質與製作地', '售價、通路與補貨時間'],
   questions: [
@@ -172,7 +172,7 @@ async function loadHealth() {
 }
 function updateControls() {
   const locked = state.busy || state.loading;
-  for (const id of ['brand-url', 'material-text', 'choose-file', 'load-sample', 'file-input']) $(id).disabled = locked;
+  for (const id of ['brand-url', 'material-text', 'ref-urls', 'choose-file', 'load-sample', 'file-input']) $(id).disabled = locked;
   const count = charCount($('material-text').value.trim());
   $('material-count').textContent = `${count.toLocaleString('zh-TW')} 字`;
   $('start').disabled = locked || count <= 40;
@@ -203,7 +203,7 @@ function keywordsView(data) {
 }
 function interviewView(data) {
   const groups = [...new Set(data.questions.map((item) => item.group))];
-  return `<div class="two-columns"><section><h3>素材裡已有的事實</h3><ul class="facts">${data.facts.map((item) => `<li>${escapeHTML(item.fact)}<blockquote>「${escapeHTML(item.quote)}」</blockquote></li>`).join('')}</ul></section><section class="missing-note"><h3>還缺什麼</h3>${list(data.missing)}</section></div><section><h3>帶著這 8 題，聊出好故事。</h3>${groups.map((group) => `<div class="question-group"><h4>${escapeHTML(group)}</h4>${data.questions.filter((item) => item.group === group).map((item) => `<div class="interview-question"><strong>${escapeHTML(item.q)}</strong><p>補哪個缺口：${escapeHTML(item.why)}</p></div>`).join('')}</div>`).join('')}</section><div class="export-actions"><button data-action="copy-interview">複製訪綱</button></div>`;
+  return `<div class="two-columns"><section><h3>素材裡已有的事實</h3><ul class="facts">${data.facts.map((item) => `<li>${escapeHTML(item.fact)} <span class="fact-source">${escapeHTML(item.source)}</span><blockquote>「${escapeHTML(item.quote)}」</blockquote></li>`).join('')}</ul></section><section class="missing-note"><h3>還缺什麼</h3>${list(data.missing)}</section></div><section><h3>帶著這 8 題，聊出好故事。</h3>${groups.map((group) => `<div class="question-group"><h4>${escapeHTML(group)}</h4>${data.questions.filter((item) => item.group === group).map((item) => `<div class="interview-question"><strong>${escapeHTML(item.q)}</strong><p>補哪個缺口：${escapeHTML(item.why)}</p></div>`).join('')}</div>`).join('')}</section><div class="export-actions"><button data-action="copy-interview">複製訪綱</button></div>`;
 }
 function outlineView(data) {
   return `<h3 class="outline-title">${richText(data.h1)}</h3><div class="answer-plan"><strong>開頭回答計畫</strong><p>${richText(data.answer_plan)}</p></div>${data.sections.map((section, i) => `<section class="outline-section"><h3><span>${String(i + 1).padStart(2, '0')}</span>${richText(section.h2)}</h3>${list(section.points)}</section>`).join('')}<section class="outline-section"><h3>常見問答</h3>${list(data.faq)}</section>`;
@@ -283,13 +283,19 @@ async function runPipeline() {
 async function startProduction() {
   if (state.busy || state.loading || charCount($('material-text').value.trim()) <= 40) return;
   state.busy = true; state.manual = false; state.active = 0;
+  $('ref-status').textContent = '';
   state.stages = keys.map(() => ({ status: 'waiting', result: null, error: '', started: 0 }));
   render();
   try {
     await initialBrand;
     if (!state.brand || state.brandUrl !== $('brand-url').value.trim()) await loadBrand();
     let material = $('material-text').value.trim();
-    if (!mockMode) { const result = await request('/api/material', { text: material }); material = result.text; }
+    if (!mockMode) {
+      const refs = $('ref-urls').value.split(/\r?\n/).map(url => url.trim()).filter(Boolean).slice(0, 3);
+      const result = await request('/api/material', { text: material, ...(refs.length ? { refs } : {}) });
+      material = result.text;
+      $('ref-status').innerHTML = (result.refs || []).map(ref => `<p title="${escapeHTML(ref.url)}">${ref.ok ? `✓ ${escapeHTML(ref.title)}（${escapeHTML(ref.chars)} 字）` : '✗ 讀不到這個網址'}</p>`).join('');
+    }
     if (charCount(material.trim()) <= 40) throw new Error('整理後的素材不足，請補到超過 40 字。');
     state.input = { material, brand: structuredClone(state.brand) };
     note(mockMode ? '虛構示範素材，不連線也能完整演示。' : '素材已整理，開始製作文章。');
