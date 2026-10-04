@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const mockMode = new URLSearchParams(location.search).get('mock') === '1';
 const names = ['關鍵字', '訪綱', '架構', '文案', '上架包'];
 const keys = ['keywords', 'interview', 'outline', 'draft', 'publish'];
-const colors = ['#E8553A', '#F0B43C', '#2F9C8E', '#B9A6E8', '#23201C'];
+const colors = ['#749655', '#e5ba39', '#638443', '#9fae74', '#405a35'];
 const dependencies = [[], [0], [0], [0, 2], [0, 3]];
 const descendants = [[1, 2, 3, 4], [], [3, 4], [4], []];
 const state = {
